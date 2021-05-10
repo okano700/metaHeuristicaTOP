@@ -51,7 +51,7 @@ class top:
                     self.dist[i][j] = np.sqrt((self.pontos[i]['x'] - self.pontos[j]['x'])**2 + (self.pontos[i]['y'] - self.pontos[j]['y'])**2)
 
                     #np.linalg.norm(np.array([self.pontos[i]['x'] - self.pontos[j]['x']]) - np.array([self.pontos[i]['y'] - self.pontos[j]['y']]))
-                    self.vDist[i][j] = self.pontos[j]['v'] / (self.dist[i][j] if self.dist[i][j] != 0 else 999999)
+                    self.vDist[i][j] = self.pontos[j]['v']**2 / (self.dist[i][j] if self.dist[i][j] != 0 else 999999)
 
             self.dist = np.array(self.dist)
             self.vDist = np.array(self.vDist)
@@ -75,7 +75,7 @@ class top:
                 self.cars[car].remove(point)
                 self.nUsed.append(point)
             else:
-                print('Ponto nao atribuido ao carro ')
+                print('Ponto ',str(point),' nao atribuido ao carro ',str(car) )
         else:
             print('Carro inexistente')
 
@@ -100,7 +100,7 @@ class top:
         cost = 0
         ant = 0
 
-        if type(car) == int:
+        if (type(car) == int):
             for i in self.cars[car]:
                 cost += self.dist[ant][i]
                 ant = i
@@ -108,11 +108,19 @@ class top:
             return cost
         else:
             for i in car:
-                #print(ant,i)
                 cost += self.dist[ant][i]
                 ant = i
             cost += self.dist[i][self.n-1]
             return cost
+    def cost2(self,car):
+        cost = 0
+        ant = 0
+        for i in self.cars[car]:
+            cost += self.dist[ant][i]
+            ant = i
+        cost += self.dist[i][self.n-1]
+        return cost
+
 
     def prize(self, car):
         cost = 0
@@ -163,13 +171,181 @@ class top:
         self.cars[car] = route
         return best
 
+    def remove_worst(self,car, z = 'dist'):
+        if len(self.cars[car]) > 2:
+            if z == 'dist':
+                dist = []
+                #print(self.cars[car])
+                for i in range(1, len(self.cars[car])-1):
+                    dist.append(self.dist[self.cars[car][i-1]][self.cars[car][i]] + self.dist[self.cars[car][i]][self.cars[car][i+1]])
+                    #print(i-1,i ,self.dist[self.cars[car][i-1]][self.cars[car][i]])
+                    #print(i, i+1,self.dist[self.cars[car][i]][self.cars[car][i+1]])
+                #print(dist)
+                #print(np.argmax(dist))
+                self.remove(self.cars[car][np.argmax(dist)+1], car)
+            if z == 'vdist':
+                dist = []
+                #print(self.cars[car])
+                for i in range(1, len(self.cars[car])-1):
+                    dist.append(self.pontos[i]["v"]/(self.dist[self.cars[car][i-1]][self.cars[car][i]] + self.dist[self.cars[car][i]][self.cars[car][i+1]]))
+
+                #print(dist)
+                #print(np.argmax(dist))
+                self.remove(self.cars[car][np.argmax(dist)+1], car)
+
+
+    def check_best(self, car, z = 'dist'):
+        bdist = []
+        bindex = []
+        if z == 'dist':
+            for i in range(len(self.cars[car])-1):
+                dist = [(self.dist[self.cars[car][i]][j] + self.dist[j][self.cars[car][i+1]] - self.dist[self.cars[car][i]][self.cars[car][i+1]]) if (j not in self.cars[car] and j in self.nUsed) else np.inf for j in range(self.n)]
+                bindex.append(np.argmin(dist))
+                bdist.append(dist[bindex[i]])
+        elif z == 'vdist':
+            for i in range(len(self.cars[car])-1):
+                dist = [(self.dist[self.cars[car][i]][j] + self.dist[j][self.cars[car][i+1]]) if (j not in self.cars[car] and j in self.nUsed) else np.inf for j in range(self.n)]
+                vdist = [self.pontos[j]["v"]/(self.dist[self.cars[car][i]][j] + self.dist[j][self.cars[car][i+1]]- self.dist[self.cars[car][i]][self.cars[car][i+1]]) if (j not in self.vDist[car] and j in self.nUsed) else 0 for j in range(self.n)]
+                bindex.append(np.argmax(vdist))
+                bdist.append(dist[bindex[i]])
+        return bindex[np.argmin(bdist)], bdist[np.argmin(bdist)]
+
+    def raw_best(self, car, z = 'dist'):
+        bdist = []
+        bindex = []
+        if z == 'dist':
+            for i in range(len(self.cars[car])-1):
+                dist = [(self.dist[self.cars[car][i]][j] + self.dist[j][self.cars[car][i+1]] - self.dist[self.cars[car][i]][self.cars[car][i+1]]) if (j not in self.cars[car]) else np.inf for j in range(self.n)]
+                bindex.append(np.argmin(dist))
+                bdist.append(dist[bindex[i]])
+        elif z == 'vdist':
+            for i in range(len(self.cars[car])-1):
+                dist = [(self.dist[self.cars[car][i]][j] + self.dist[j][self.cars[car][i+1]]) if (j not in self.cars[car]) else np.inf for j in range(self.n)]
+                vdist = [self.pontos[j]["v"]/(self.dist[self.cars[car][i]][j] + self.dist[j][self.cars[car][i+1]]- self.dist[self.cars[car][i]][self.cars[car][i+1]]) if (j not in self.vDist[car]) else 0 for j in range(self.n)]
+                bindex.append(np.argmax(vdist))
+                bdist.append(dist[bindex[i]])
+        return bindex[np.argmin(bdist)], bdist[np.argmin(bdist)]
+
+    def RCL(self, car, alpha = 0.8, z = 'dist'):
+
+        if z == 'dist':
+            best = [self.tmax for i in range(self.n)]
+            for i in range(len(self.cars[car])-1):
+                dist = [(self.dist[self.cars[car][i]][j] + self.dist[j][self.cars[car][i+1]] - self.dist[self.cars[car][i]][self.cars[car][i+1]]) if (j not in self.cars[car] and j in self.nUsed) else np.inf for j in range(self.n)]
+                best = [min(b,d) for b,d in zip(best, dist)]
+            treshold = best[np.argmin(best)] + alpha * (best[np.argmax(best)] - best[np.argmin(best)])
+            print(treshold)
+            print(best)
+            vec = []
+            for index, value in enumerate(best):
+                if value < treshold :
+                    vec.append(index)
+            #return [index if value < treshold  for index, value in enumerate(best)]
+            return vec
+        elif z == 'vdist':
+            best = [0 for i in range(self.n)]
+            for i in range(len(self.cars[car])-1):
+                dist = [(self.dist[self.cars[car][i]][j] + self.dist[j][self.cars[car][i+1]]) if (j not in self.cars[car] and j in self.nUsed) else np.inf for j in range(self.n)]
+                vdist = [self.pontos[j]["v"]/(self.dist[self.cars[car][i]][j] + self.dist[j][self.cars[car][i+1]] + 1 - self.dist[self.cars[car][i]][self.cars[car][i+1]]) if (j not in self.vDist[car] and j in self.nUsed) else 0 for j in range(self.n)]
+                best = [max(b,d) for b,d in zip(best, vdist)]
+            treshold = best[np.argmin(best)] + alpha * (best[np.argmax(best)] - best[np.argmin(best)])
+            vec = []
+            for index, value in enumerate(best):
+                if value > treshold :
+                    vec.append(index)
+            #return [index if value < treshold  for index, value in enumerate(best)]
+            return vec
 
 
     def greed_start(self):
-        #implementar
-        for i in range(self.m):
-            teste = 0
-        return 0
+
+        flags = [0 for i in range(self.m)]
+        while True:
+            car = np.random.choice([i for i in range(self.m)])
+            p, vdist = self.check_best(car,z = 'vdist')
+            pd, dist = self.check_best(car,z = 'dist')
+            self.add(p,car)
+            self.two_opt(car)
+            if (self.cost2(car)) > self.tmax:
+                self.remove(p,car)
+                self.two_opt(car)
+                self.add(pd,car)
+                self.two_opt(car)
+                if self.cost2(car) > self.tmax:
+                    self.remove(pd,car)
+                    self.two_opt(car)
+                    flags[car] = 1
+            if (sum(flags) == self.m):
+                self.objective_function()
+                break
+
+def semi_greed(top, alpha = 0.8, z = 'vdist', ordered = True, r = 1):
+    for i in range(r):
+        for car in range(len(top.cars)):
+            top.add(np.random.choice(top.nUsed),car)
+
+    if ordered:
+        for i in range(len(top.cars)):
+            while(top.cost(i) < top.tmax):
+                top.add(np.random.choice(top.RCL(i, alpha, z)), i)
+                top.two_opt(i)
+            while(top.cost(i) > top.tmax):
+                top.remove_worst(i,z)
+                top.two_opt(i)
+    else:
+        flags = [0 for i in range(self.m)]
+        while(True):
+            car = np.random.choice([i for i in range(self.m)])
+            top.add(np.random.choice(top.RCL(car, alpha, z)), car)
+            top.two_opt(car)
+            if self.cost2(car) > self.tmax:
+                self.remove(pd,car)
+                self.two_opt(car)
+                flags[car] = 1
+            if (sum(flags) == self.m):
+                self.objective_function()
+                break
+
+def grasp_LS(top, k = 2):
+    aux = copy.deepcopy(top)
+    best = copy.deepcopy(aux)
+
+    for car in range(len(top.cars)):
+        for i in range(k):
+            aux.remove_worst(car,z = 'vdist')
+    for car in range(len(top.cars)):
+        while(True):
+            ponto, dist = aux.check_best(car, z = 'dist')
+            if aux.cost2(car) + dist <= aux.tmax:
+                aux.add(ponto,car)
+                aux.two_opt(car)
+            else:
+                break
+    if aux.objective_function()>best.objective_function():
+        best = aux
+    return best
+
+def GRASP(S, tmax = 10, z = 'vdist', alpha = 0.7, k = 1, r =1):
+    init = copy.deepcopy(S)
+    best = copy.deepcopy(S)
+    b = best.objective_function()
+    start = time.perf_counter()
+    log = []
+    log.append(best.objective_function())
+    now = time.perf_counter()
+    while now < start + tmax:
+        aux = copy.deepcopy(init)
+        semi_greed(aux, alpha = alpha, r = r)
+        aux = grasp_LS(aux, k = k)
+        a = aux.objective_function()
+
+        if a > b:
+            b = a
+            best = copy.deepcopy(aux)
+        log.append(best.of)
+        now = time.perf_counter()
+
+    return best, log,(now - start)
 
 def shake(S,n):
     aux = copy.deepcopy(S)
@@ -363,6 +539,7 @@ def simmulated_annealing(s0 ,T0 = 10000 ,Tf = 1 , SAmax = 1000, alpha = 0.97):
         print("melhor", best.of)
         T = T * alpha
     return best, log, logB
+
 
 
 if __name__ == '__main__':
