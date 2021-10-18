@@ -65,7 +65,9 @@ class top:
                 self.cars[car].insert(len(self.cars[car])-1, point)
                 self.nUsed.remove(point)
             else:
-                print('Ponto inexistente ou ja utilizado')
+                print('Ponto '+str(point)+' ja utilizado')
+                print(self.cars)
+                print(self.nUsed)
         else:
             print('Carro inexistente')
 
@@ -78,6 +80,12 @@ class top:
                 print('Ponto ',str(point),' nao atribuido ao carro ',str(car) )
         else:
             print('Carro inexistente')
+
+    def clear_all(self):
+        self.cars = [[0, self.n-1] for i in range(self.m)]
+        self.over = [0 for i in range(self.m)]
+        self.nUsed = [int(i) for i in range(1,self.n-1)]
+        self.of = 0
 
     def swap(self, p1, p2, c1, c2):
         if ((c1> len(self.cars)) or (c2 > len(self.cars)) or (p1 not in self.cars[c1]) or (p2 not in self.cars[c2])):
